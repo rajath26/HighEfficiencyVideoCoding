@@ -1,0 +1,4 @@
+12-12-2013
+
+1) Move the frame into global memory only once and in the first kernel invocation copy it to constant memory and then each 
+time load shared memory from constant memory
