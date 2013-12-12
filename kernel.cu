@@ -24,7 +24,7 @@
 #define TWO 2
 #define MINUS -1
 
-__global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32_t *res_y, int32_t *res_cr, int32_t *res_cb, uint8_t *y_modes, uint8_t *cr_modes, uint8_t *cb_modes)
+__global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32_t *res_y, int32_t *res_cr, int32_t *res_cb, uint8_t *y_modes, uint8_t *cr_modes, uint8_t *cb_modes, int width)
 {
 
     int bsize = blockDim.x;
@@ -117,9 +117,13 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
     {
         if ( ! ((0 == bx) || (0 == by)) )
         {
-            pyy[ZERO] =  y[(row-1)*width + (col-1)];
-            pycr[ZERO] = cr[(row-1)*width +(col-1)];
-            pycb[ZERO] = cb[(row-1)*width +(col-1)];
+            // this should have been pyy[MINUS]
+            pyy[MINUS] = y[(row-1)*width + (col-1)];
+            pycr[MINUS] = y[(row-1)*width + (col-1)];
+            pycb[MINUS] = y[(row-1)*width + (col-1)];
+            //pyy[ZERO] =  y[(row-1)*width + (col-1)];
+            //pycr[ZERO] = cr[(row-1)*width +(col-1)];
+            //pycb[ZERO] = cb[(row-1)*width +(col-1)];
         }
     }
 
