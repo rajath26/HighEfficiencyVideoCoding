@@ -17,19 +17,34 @@
 //****************************************************************************
 //////////////////////////////////////////////////////////////////////////////
 
-#include<stdio.h>
+#include <stdio.h>
+#include <math.h>
 
 #define ZERO 0 
 #define ONE 1
 #define TWO 2
 #define THREE 3
 #define MINUS -1
-#define DC_MODE 0 //TO DO: check if dc mode is zero
-#define PLANAR_MODE 1 //TO DO:
+#define DC_MODE 1 
+#define PLANAR_MODE 0 
+#define BITDEPTHY 8
+#define BITDEPTHC 8
+#define ANGULAR_18 18
+#define ANGULAR_26 26
+#define  ANGULAR_10 10
 
+#define abs(x) ( ( (x) < 0 ) ? -(x) : (x) )
+#define min(x,y) ( (x) < (y) ? (x) : (y) )
+
+//////////////////////////////////////////////////////
+//////////////////////////////////////////////////////
+//////////////  KERNEL FUNCTION  /////////////////////
+//////////////////////////////////////////////////////
+//////////////////////////////////////////////////////
 __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32_t *res_y, int32_t *res_cr, int32_t *res_cb, uint8_t *y_modes, uint8_t *cr_modes, uint8_t *cb_modes, int width)
 {
 
+    // Thread indices, Block Indices and Dimensions
     int bsize = blockDim.x;
 
     int bx = blockIdx.x;
@@ -39,12 +54,21 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
     int ty = threadIdx.y;
 
     // Thread Index to Data Index Mapping
-    int col = tx + blockDim.x * bx; // Column
-    int row = ty + blockDim.y * by; // Row
+    int col = tx + blockDim.x * bx; 
+    int row = ty + blockDim.y * by;
 
     // Shared neighbour memory
     int neighbourArraySize = (bsize * TWO) + ONE;
 
+    int bitDepthY=BITDEPTHY;
+    int bitDepthC=BITDEPTHC;
+
+    int rowToBeLoaded=0;
+    int colToBeLoaded=0;
+
+    /////////
+    // Neighbour Array
+    ////////
     // y is vertical array that has the extra element that is [-1][-1]
     // x is horizontal component
 
@@ -66,16 +90,19 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
     uint8_t *pycb = &p_ycb[ONE];
     uint8_t *pxcb = &p_xcb[ZERO];
 
-
+    // Points to the righ top most block for which all
+    // the neighbour elements fall outside the image boundaries
     unsigned int fallOutside = 0;
 
-    // This is to take care of the four corner blocks in the grid
+    // This is to take care of the top right corner blocks in the grid
     // OPTIMIZATION
     if ( (0 == bx && 0 == by) )
          fallOutside = 1;
 
     //////////////////////////////////
+    //////////////////////////////////
     // Step 1: LOAD NEIGHBOUR ELEMENTS
+    //////////////////////////////////
     //////////////////////////////////
 
     // Load into the shared memory from global memory
@@ -84,91 +111,128 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
     // Load luma elements
     if ( ZERO == row )
     {
-        // TO DO : what is bitDepthC and bitDepthY ? 8 for all sizes ?
-        pxy[tx] = (fallOutside == 1) ? (1 << (bitDepthY -1)) : y[(row*width)+col]; // TO DO 
-        pxcr[tx] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : cr[(row*width)+col];
-        pxcb[tx] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : cb[(row*width)+col];
+        rowToBeLoaded=row-1;
+        colToBeLoaded=col;
+
+        if(rowToBeLoaded>=0 && rowToBeLoaded<height && colToBeLoaded>=0 && colToBeLoaded<width)
+        { 
+            pxy[tx] = (fallOutside == 1) ? (1 << (bitDepthY -1)) : y[(rowToBeLoaded*width)+colToBeLoaded];  
+            pxcr[tx] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : cr[(rowToBeLoaded*width)+colToBeLoaded];
+            pxcb[tx] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : cb[(rowToBeLoaded*width)+colToBeLoaded];
+        }
     }
     else if ( ONE == row )
     {
-        // TO DO : what is bitDepthC and bitDepthY ?
-    	pxy[tx + bsize] = (fallOutside == 1) ? (1 << (bitDepthY)) : y[(row*width)+col];
-        pxcr[tx + bsize] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : (cr[(row*width)+col]);
-        pxcb[tx + bsize] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : (cb[(row*width)+col]);
+        rowToBeLoaded=row-2;
+        colToBeLoaded=col+blockDim.x;
+
+        if(rowToBeLoaded>=0 && rowToBeLoaded<height && colToBeLoaded>=0 && colToBeLoaded<width)
+        { 
+    	    pxy[tx + bsize] = (fallOutside == 1) ? (1 << (bitDepthY)) : y[(rowToBeLoaded*width)+colToBeLoaded];
+            pxcr[tx + bsize] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : (cr[(rowToBeLoaded*width)+colToBeLoaded]);
+            pxcb[tx + bsize] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : (cb[(rowToBeLoaded*width)+colToBeLoaded]);
+        }
     }
     else if ( TWO == row )
     {
-        // TO DO : what is bitDepthC and bitDepthY ?
-        pyy[ty] = (fallOutside == 1) ? (1 << (bitDepthY)) : y[row*width + col];
-        pycr[ty] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : (cr[row*width + col]);
-        pycb[ty] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : (cb[row*width + col]);
+        rowToBeLoaded=(row-2)+tx;
+        colToBeLoaded=blockDim.x*blockIdx.x-1;
+
+        if(rowToBeLoaded>=0 && rowToBeLoaded<height && colToBeLoaded>=0 && colToBeLoaded<width)
+        { 
+            pyy[ty] = (fallOutside == 1) ? (1 << (bitDepthY)) : y[rowToBeLoaded* + colToBeLoaded];
+            pycr[ty] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : (cr[rowToBeLoaded*width + colToBeLoaded]);
+            pycb[ty] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : (cb[rowToBeLoaded*width + colToBeLoaded]);
+        }
     }
     else if ( THREE == row )
     {
-        pyy[ty + bsize] = (fallOutside == 1) ? (1 << (bitDepthY)) : y[row*width + col];
-        pycr[ty + bsize] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : (cr[row*width + col]);
-        pycb[ty + bsize] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : (cb[row*width + col]);
+        rowToBeLoaded=(row+1)+tx;
+        colToBeLoaded=blockIdx.x*blockDim.x-1;
+
+        if(rowToBeLoaded>=0 && rowToBeLoaded<height && colToBeLoaded>=0 && colToBeLoaded<width)
+        { 
+            pyy[ty + bsize] = (fallOutside == 1) ? (1 << (bitDepthY)) : y[rowToBeLoaded*width + colToBeLoaded];
+            pycr[ty + bsize] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : (cr[rowToBeLoaded*width + colToBeLoaded]);
+            pycb[ty + bsize] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : (cb[rowToBeLoaded *width + colToBeLoaded]);
+        }
     }
     else
     {
-
+        // Nothing to do here
     }
 
     // This is to load the extra guy in the neighbour element array
     // who is not filled by the threads in the current block
+    // i.e. the extra element in the pyy, pycr, pycb array
     if ( 0 == tx && 0 == ty ) 
     {
         if ( ! ((0 == bx) || (0 == by)) )
         {
             // this should have been pyy[MINUS]
-            pyy[MINUS] = y[(row-1)*width + (col-1)];
-            pycr[MINUS] = y[(row-1)*width + (col-1)];
-            pycb[MINUS] = y[(row-1)*width + (col-1)];
-        }
-    }
+            rowToBeLoaded=row-1;
+            colToBeLoaded=col-1;
+            
+            if(rowToBeLoaded>=0 && rowToBeLoaded<height && colToBeLoaded>=0 && colToBeLoaded<width)
+            { 
+                pyy[MINUS] = y[(rowToBeLoaded-1)*width + (colToBeLoaded-1)];
+                pycr[MINUS] = y[(rowToBeLoaded-1)*width + (colToBeLoaded-1)];
+                pycb[MINUS] = y[(rowToBeLoaded-1)*width + (colToBeLoaded-1)];
+            }
+        } // End of if ( ! ((0 == bx) || (0 == by)) )
+    } // End of if ( 0 == tx && 0 == ty )
 
-    // Barrier Synchronization
     __syncthreads();
 
+ 
+    //////////////////////////
     //////////////////////////
     // Step 2: First Filtering
+    //////////////////////////
     //////////////////////////
     
     if ( ZERO == tx && ZERO == ty )
     {
-        // 
-        if (by==(gridDim.y-1)){
-              if(bx==ZERO){
-                  for(int i=0;i<neighbourArraySize;i++){
-                         pyy[i]=pxy[ZERO];
-                         pycr[i] = pxcr[ZERO];
-                         pycb[i] = pxcb[ZERO];
-                  }
-                   pyy[MINUS] = pxy[ZERO];
-                   pycr[MINUS] = pxcr[ZERO];
-                   pycb[MINUS] = pxcb[ZERO];
-              }
-              else{
-                  for(int i=bsize;i<=(2*bsize-1);i++){
-                     pyy[i]=pyy[bsize-ONE];
-                     pycr[i] = pycr[bsize-ONE];
-                     pycb[i] = pycb[bsize-ONE];
-                  }
-                   pyy[MINUS] = pyy[bsize-ONE];
-                   pycr[MINUS] = pyy[bsize-ONE];
-                   pycb[MINUS] = pyy[bsize-ONE];
-              }
-         }
-         if(0==by){
-              pyy[MINUS]=pyy[ZERO];
-              pycr[MINUS] = pycr[ZERO];
-              pycb[MINUS] = pycb[ZERO];
-              for(int i=0;i<2*bsize;i++){
-                  pxy[i]=pyy[MINUS];
-                  pxcr[i]=pycr[MINUS];
-                  pxcb[i]=pycb[MINUS];
-              }
-         }      
+
+        if (by==(gridDim.y-1))
+        {
+            if(bx==ZERO)
+            {
+                for(int i=0;i<neighbourArraySize;i++)
+                {
+                    pyy[i]=pxy[ZERO];
+                    pycr[i] = pxcr[ZERO];
+                    pycb[i] = pxcb[ZERO];
+                }
+                pyy[MINUS] = pxy[ZERO];
+                pycr[MINUS] = pxcr[ZERO];
+                pycb[MINUS] = pxcb[ZERO];
+            }
+            else
+            {
+                for(int i=bsize;i<=(2*bsize-1);i++)
+                {
+                    pyy[i]=pyy[bsize-ONE];
+                    pycr[i] = pycr[bsize-ONE];
+                    pycb[i] = pycb[bsize-ONE];
+                }
+                pyy[MINUS] = pyy[bsize-ONE];
+                pycr[MINUS] = pyy[bsize-ONE];
+                pycb[MINUS] = pyy[bsize-ONE];
+            }
+         } // End of if (by==(gridDim.y-1))
+         if(0==by)
+         {
+             pyy[MINUS]=pyy[ZERO];
+             pycr[MINUS] = pycr[ZERO];
+             pycb[MINUS] = pycb[ZERO];
+             for(int i=0;i<2*bsize;i++)
+             {
+                 pxy[i]=pyy[MINUS];
+                 pxcr[i]=pycr[MINUS];
+                 pxcb[i]=pycb[MINUS];
+             }
+         } // End of if ( 0 == by )
          if((bx == (gridDim.x - 1)) && (0 != by))
          {
              for ( int i = bsize; i < (2 * bsize - 1); i++ )
@@ -178,95 +242,517 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
                  pxcb[i] = pxcb[bsize - 1];
              }
          }
-    }
+    } // End of if ( ZERO == tx && ZERO == ty )
   
-  __syncthreads();
-  //////////////////////////////////////////////////////////////////////////////////////////
-  // done with first filteing of neighboring elements. second filtering happens inline with 
-  // mode computation. 
-  ////////////////////////////////////////////////////////////////////////////////////////////
+    __syncthreads();
 
-  ///////////////////////////////////////////////////////////////////////////////////////////
-  // STEP 3 STARTS FROM HERE : MODE COMPUTATION AND 2ND FILTERING INLINE
-  ///////////////////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////
+    /////////////////////////////////////////////////
+    // STEP 3 : MODE COMPUTATION AND SECOND FILTERING
+    /////////////////////////////////////////////////
+    /////////////////////////////////////////////////
 
-  extern __device__ __shared__ uint8_t pf_yy[];
-  extern __device__ __shared__ uint8_t pf_xy[];   
+    // TO DO
+    /////////
+    // Second Filtered neighbour array
+    /////////
+    extern __device__ __shared__ uint8_t pf_yy[];
+    extern __device__ __shared__ uint8_t pf_xy[];   
   
-  __device__ __shared__ uint8_t predSamplesY[BLOCK_SIZE][BLOCK_SIZE];//TO DO: Derive this size.Ask matt
-  __device__ __shared__ uint8_t predSamplesCr[BLOCK_SIZE][BLOCK_SIZE];//TO DO: Derive this size.Ask matt
-  __device__ __shared__ uint8_t predSamplesCb[BLOCK_SIZE][BLOCK_SIZE];//TO DO: Derive this size.Ask matt
+    ////////
+    // Predicted pixels
+    ///////
+    __device__ __shared__ uint8_t predSamplesY[MAX_BLOCK_SIZE][MAX_BLOCK_SIZE];
+    __device__ __shared__ uint8_t predSamplesCr[MAX_BLOCK_SIZE][MAX_BLOCK_SIZE];
+    __device__ __shared__ uint8_t predSamplesCb[MAX_BLOCK_SIZE][MAX_BLOCK_SIZE];
 
-  uint8_t *pfyy = &pf_yy[ONE];
-  uint8_t *pfxy = &pf_xy[ZERO];
+    // Pointer to predicted pixels
+    uint8_t *pfyy = &pf_yy[ONE];
+    uint8_t *pfxy = &pf_xy[ZERO];
    
-  for(int mode =0;mode <35;i++){
-  // if the  computed value of  filterFlag==1, use the filtered array pF instead of p for intra prediction.
-           int filterFlag=0;
-           int biIntFlag= 0;
+    // Loop through all modes
+    for(int mode =0;mode <35;mode++)
+    {
+        // if the  computed value of  filterFlag==1, use the filtered array pF instead of p for intra prediction.
+        int filterFlag=0;
+        int biIntFlag= 0;
    
-           if(ty==0 && tx==0){ 
-                      if(mode==DC_MODE || bsize==4){
-                                    filterFlag=1;
-                      }
-                      else{
-  	          	 //TO_DO Check if abs can be called in GPU Kernel
-                 	 int minDistVerHor=min(abs(mode-26),abs(mode-10));
-		  	 int intraHorVerDistThres;
-   			 if(bsize==8){
-        			intraHorVerDistThres=7;
-         		 }
-      			 else if(bsize==16){
-       		        	intraHorVerDistThres=1;
-   		         }
-  		         else if(bsize==32){
-       			 	intraHorVerDistThres=0;
-  		         }
-		         if(minDistVerHor>intraHorVerDistThres){
-        	                filterFlag=1;
-   		         }
-                      }
+        if(ty==0 && tx==0)
+        { 
+            //////////////
+            // FILTER FLAG
+            //////////////
+            if(mode==DC_MODE || bsize==4)
+                filterFlag=0;
+            else
+            {
+  	        //TO_DO Check if abs can be called in GPU Kernel
+                // TO DO min 
+                int minDistVerHor = min(abs(mode-26),abs(mode-10));
+                int intraHorVerDistThres;
+   			 
+                if(bsize==8)
+                    intraHorVerDistThres=7;
+                else if(bsize==16)
+       		    intraHorVerDistThres=1;
+  		else if(bsize==32)
+       	            intraHorVerDistThres=0;
+		if(minDistVerHor>intraHorVerDistThres)
+        	    filterFlag=1;
+                else
+                    filterFlag = 0;
+            } // End of else of if ( mode == DC_MODE || bsize == 4 )
            
-   		     if(filterFlag==1){
-                               if(bsize==32 && ( abs ( pyy[-1] + pxy[bsize*2-1] - (2*pxy[bsize-1]) ) < (1<<(BITDEPTHy-5) ) ) && ( abs ( pyy[-1] + pyy[bsize*2-1] - (2*pyy[bsize-1]) ) < (1<<(BITDEPTHy-5) ) )){
-                                      biIntFlag=1;
-                               }
-                     }
+            if(filterFlag==1)
+            {
+                /////////////
+                // B INT FLAG
+                /////////////
+                if(bsize==32 && ( abs ( pyy[-1] + pxy[bsize*2-1] - (2*pxy[bsize-1]) ) < (1<<(BITDEPTHy-5) ) ) && ( abs ( pyy[-1] + pyy[bsize*2-1] - (2*pyy[bsize-1]) ) < (1<<(BITDEPTHy-5) ) ))
+                    biIntFlag=1;
+            } // End of if ( 1 == filterFlag )
      
-                     if(biIntFlag==1){
-                              pfyy[MINUS]=pyy[MINUS];
-                              for(int i=0;i<(bsize*2-2);i++){
-                                       pfyy[i]=((63-i)*pyy[MINUS]+(i+1)*pyy[63]+32)>>6; 
-                              }
-                              pfyy[63]=pyy[63];
-                              for(int i=0;i<(bsize*2-2);i++){
-                                       pfxy[i]=((63-i)*pyy[MINUS]+(i+1)*pxy[63]+32)>>6;
-                              }
-                              pfxy[63]=pxy[63];
-                     }
+            if(biIntFlag==1)
+            {
+                pfyy[MINUS]=pyy[MINUS];
+                for(int i=0;i<(bsize*2-2);i++)
+                {
+                    pfyy[i]=((63-i)*pyy[MINUS]+(i+1)*pyy[63]+32)>>6; 
+                }
+                pfyy[63]=pyy[63];
+                for(int i=0;i<(bsize*2-2);i++)
+                {
+                    pfxy[i]=((63-i)*pyy[MINUS]+(i+1)*pxy[63]+32)>>6;
+                }
+                pfxy[63]=pxy[63];
+            } // End of if ( 1 == biIntFlag )
 
-                     else{
-                              pfyy[MINUS]=(pyy[ZERO]+2*pyy[MINUS]+pxy[ZERO]+2)>>2;
-                              for(int i=0;i<(bsize*2-2);i++){
-                                      pfyy[i]=(pyy[i+1]+2*pyy[i]+pyy[i-1]+2)>>2;
-                              }
-                              pfyy[bsize*2-1]=pyy[bsize*2-1];
-                              for(int i=0;i<(bsize*2-2);i++){
-                                      pfxy[i]=(pxy[i-1]+2*pxy[i]+pxy[i+1]+2)>>2;
-                              }
-                              pfxy[bsize*2-1]=pxy[bsize*2-1];
-                    }
-           }
-  }  
+            else
+            {
+                pfyy[MINUS]=(pyy[ZERO]+2*pyy[MINUS]+pxy[ZERO]+2)>>2;
+                for(int i=0;i<(bsize*2-2);i++)
+                {
+                    pfyy[i]=(pyy[i+1]+2*pyy[i]+pyy[i-1]+2)>>2;
+                }
+                pfyy[bsize*2-1]=pyy[bsize*2-1];
+                for(int i=0;i<(bsize*2-2);i++)
+                {
+                    pfxy[i]=(pxy[i-1]+2*pxy[i]+pxy[i+1]+2)>>2;
+                }
+                pfxy[bsize*2-1]=pxy[bsize*2-1];
+           } // End of else of if ( 1 -- biIntFlag )
 
-  __syncthreads();
-
-    if(mode==PLANAR_MODE){
-         predSamplesY[tx][ty]=((bsize-1-tx)*Pyy[ty]+(tx+1)*Pxy[bsize]+(bsize-1-ty)*Pxy[tx]+(ty+1)*Pyy[bsize]+bsize)>>log2(bsize+1); //TO_DO: Replace logarithmic with appropriate C function    
-         predSamplesCr[tx][ty]=((bsize-1-tx)*Pycr[ty]+(tx+1)*Pxcr[bsize]+(bsize-1-ty)*Pxcr[tx]+(ty+1)*Pycr[bsize]+bsize)>>log2(bsize+1); //TO_DO: Replace logarithmic with appropriate C function    
-         predSamplesCb[tx][ty]=((bsize-1-tx)*Pycb[ty]+(tx+1)*Pxcb[bsize]+(bsize-1-ty)*Pxcb[tx]+(ty+1)*Pycb[bsize]+bsize)>>log2(bsize+1); //TO_DO: Replace logarithmic with appropriate C function    
+       } // End of if(ty==0 && tx==0)
     
-    }
+        __syncthreads();
+
+        //////////////
+        // Switch pointer to pfyy or p_yy
+        // Switch pointer to pfxy or p_xy
+        /////////////
+        uint8_t* selyy,selxy; 
+        if(filterFlag==1)
+        {
+            selyy=pfyy;
+            selxy=pfxy;
+        }
+        else
+        {
+            selyy=pyy;
+            selxy=pxy;
+        }   
+
+        // TO DO : change aray size
+        // TO DO : declare ISA in constant mem
+        // TO DO : define IA in constant mem
+        __device__ __shared__ uint8_t refY[3*bsize];
+        __device__ __shared__ uint8_t refCr[3*bsize];
+        __device__ __shared__ uint8_t refCb[3*bsize];
+
+        // TO DO
+        // OPtimization making iIdx and IFact as matrices
+        __device__ __shared__ iIdx[bsize][bsize];
+        __device__ __shared__ iFact[bsize][bsize];
+
+
+        ////////////////////
+        // MODE: PLANAR MODE
+        ////////////////////
+        // TO DO : is this ty tx
+        if(mode==PLANAR_MODE)
+        {
+
+            float logValue = log2f(bsize+1.0);
+            int intLog = (int) logValue;
+
+            predSamplesY[tx][ty]=((bsize-1-tx)*selyy[ty]+(tx+1)*selxy[bsize]+(bsize-1-ty)*selxy[tx]+(ty+1)*selyy[bsize]+bsize)>>intLog; //TO_DO: Replace logarithmic with appropriate C function    
+            predSamplesCr[tx][ty]=((bsize-1-tx)*pycr[ty]+(tx+1)*pxcr[bsize]+(bsize-1-ty)*pxcr[tx]+(ty+1)*pycr[bsize]+bsize)>>intLog; //TO_DO: Replace logarithmic with appropriate C function    
+            predSamplesCb[tx][ty]=((bsize-1-tx)*pycb[ty]+(tx+1)*pxcb[bsize]+(bsize-1-ty)*pxcb[tx]+(ty+1)*pycb[bsize]+bsize)>>intLog; //TO_DO: Replace logarithmic with appropriate C function    
+    
+        }
+
+        ////////////////
+        // MODE: DC MODE
+        ////////////////
+        else if ( DC_MODE == mode )
+        {
+
+            uint8_t dcValY = 0;
+            uint8_t dcValCr = 0;
+            uint8_t dcValCb = 0;
+ 
+            uint8_t firstSumY = 0;
+            uint8_t secondSumY = 0;
+            uint8_t firstSumCr = 0;
+            uint8_t secondSumCr = 0;
+            uint8_t firstSumCb = 0;
+            uint8_t secondSumCb = 0;
+
+            if ( 0 == tx && 0 == ty )
+            {
+                firstSumY = sumArray(selxy, 0, bsize - 1);
+            }
+            else if ( 1 == tx && 0 == ty )
+            {
+                secondSumY = sumArray(selyy, 0, bsize - 1);
+            }
+            else if ( 2 == tx && 0 == ty ) 
+            {
+                firstSumCr = sumArray(pxcr, 0, bsize - 1);
+            } 
+            else if ( 3 == tx && 0 == ty )
+            {
+                secondSumCr = sumArray(pycr, 0, bsize - 1);
+            }
+            else if ( 4 == tx && 0 == ty )
+            {
+                firstSumCr = sumArray(pxcb, 0, bsize - 1);
+            } 
+            else if ( 5 == tx && 0 == ty )
+            {
+                secondSumCr = sumArray(pycb, 0, bsize - 1);
+            }
+
+            __syncthreads(); 
+ 
+            if ( 0 == tx && 0 == ty )
+            {
+                dcValY = (firstSumY + secondSumY + bsize) >> ((int)log2f((float)bsize)+1);
+            }
+
+            else if ( 1 == tx && 0 == ty )
+            {
+                dcValCr = (firstSumCr + secondSumCr + bsize) >> ((int)log2f((float)bsize)+1);
+            }
+
+            else if ( 2 == tx && 0 == ty )
+            {
+                dcValCb = (firstSumCb + secondSumCb + bsize) >> ((int)log2f((float)bsize)+1);
+            }
+
+            __syncthreads();
+
+            if ( bsize < 32 )
+            {
+                //Apply following changes to predSamples only for luma channel
+                predSamplesY[0][0]=(selyy[ZERO]+2*dcValY+selxy[0]+2)>>2;
+           
+                for(int i=1;i<bsize;i++)
+                {
+            	    predSamplesY[i][0]+=(selyy[i]+3*dcValY++2)>>2;
+                }  
+            
+                for(int i=1;i<bsize;i++)
+                {
+            	    predSamplesY[0][i]+=(selxy[i]+3*dcValY++2)>>2;
+                } 
+
+                for(int i=1;i<bsize;i++)
+                {
+                    for(int j=1;j<bsize;j++)
+                    {
+                        predSamplesY[i][j]=dcValY;
+                    }
+                }
+            } // End of if ( bsize < 32 )
+            else 
+            {
+                //For cr and cb, set dcValue as all value for predSamples of cr and cb  
+                for(int i=0;i<bsize;i++)
+                {
+                   for(int j=0;j<bsize;j++)
+                   {
+                      if ( bsize == 32 )
+                          predSamplesY[i][i][j] = dcValY;
+                      predSamplesCr[i][j]=dcValCr;
+                      predSamplesCb[i][j]=dcValCb;
+                   }
+                }  
+            } // End of else of if ( bsize < 32 )
+
+        } // End of else if ( DC_MODE == mode )
+
+        ///////////////
+        // ANGULAR MODE
+        ///////////////
+
+        else if ( mode >= ANGULAR_18 )
+        {
+
+            // OPTIMIZATION 
+            if ( bsize == 4 )
+            {
+                if ( 0 == ty ) 
+                {
+                    refY[tx] = selxy[-1 + tx];
+                    refCr[tx] = pxcr[-1 + tx]; 
+                    refCb[tx] = pxcb[-1 + tx];
+                    if ( 0 == tx )
+                    {
+                        refY[bsize+tx] = selxy[-1 + (tx + bsize)];
+                        refCr[bsize+tx] = pxcr[-1 + (tx + bsize)];
+                        refCb[bsize+tx] = pxcb[-1 + (tx + bsize)];
+                    }
+                }
+
+                if (ipa[mode] < 0) 
+                {
+                    if ( ((bsize * ipa[mode]) >> 5) < -1 )
+                    {
+                        if ( 1 == ty )
+                        {
+                            refY[-(tx + 1)] = selyy[ -1 + (( tx + 1 ) * ia[mode] + 128) >> 8];
+                        }
+                        if ( 2 == ty ) 
+                        {
+                            refCr[-(tx + 1)] = pycr[ -1 + (( tx + 1 ) * ia[mode] + 128) >> 8];
+                            refCb[-(tx + 1)] = pycb[ -1 + (( tx + 1 ) * ia[mode] + 128) >> 8];
+                        } 
+                    } // End of if ( ((bsize * ipa[mode]) >> 5) < -1 )
+                } // End of if (ipa[mode] < 0)
+                else 
+                {
+                    if ( 3 == ty )
+                    {
+                        refY[tx + bsize + 1] = selxy[-1 + tx + bsize + 1];
+                        refCr[tx + bsize + 1] = pxcr[-1 + tx + bsize + 1];
+                        refCb[tx + bsize + 1] = pxcb[-1 + tx + bsize + 1];
+                    }
+                } // End of else of if (ipa[mode] < 0)
+
+            } // End of if ( bsize == 4 )
+            else 
+            {
+                if ( 0 == ty ) 
+                {
+                    ref[tx] = selxy[-1 + tx];
+                    if ( 0 == tx )
+                        refY[bsize + tx] = selxy[-1 + (tx + bsize)];
+                }
+                if ( 1 == ty ) 
+                {
+                    refCr[tx] = pxcr[-1 + tx];
+                    if ( 0 == tx )
+                        refCr[bsize+tx] = pxcr[-1 + (tx + bsize)];
+                } 
+                if ( 2 == ty ) 
+                {
+                    refCb[tx] = pxcb[-1 + tx];
+                    if ( 0 == tx )
+                        refCb[bsize+tx] = pxcb[-1 + (tx + bsize)];
+                } 
+                if (ipa[mode] < 0)
+                {
+                    if ( ((bsize * ipa[mode]) >> 5) < -1 )
+                    {
+                        if ( 3 == ty )
+                        {
+                            refY[-(tx + 1)] = selyy[ -1 + (( tx + 1 ) * ia[mode] + 128) >> 8];
+                        }
+                        if ( 4 == ty )
+                        {
+                            refCr[-(tx + 1)] = pycr[ -1 + (( tx + 1 ) * ia[mode] + 128) >> 8];
+                        }
+                        if ( 5 == ty )
+                        {
+                            refCb[-(tx + 1)] = pycb[ -1 + (( tx + 1 ) * ia[mode] + 128) >> 8];
+                        }
+                    } // End of if ( ((bsize * ipa[mode]) >> 5) < -1 )
+                } // End of if (ipa[mode] < 0)
+                else
+                {
+                    if ( 6 == ty )
+                        refY[tx + bsize + 1] = selxy[-1 + tx + bsize + 1];
+                    if ( 7 == ty )
+                    {
+                        refCr[tx + bsize + 1] = pxcr[-1 + tx + bsize + 1];
+                        if ( bsize == 8 )
+                            refCb[tx + bsize + 1] = pxcb[-1 + tx + bsize + 1];
+                    }
+                    if ( 8 == ty && bsize != 8 )
+                        refCb[tx + bsize + 1] = pxcb[-1 + tx + bsize + 1];
+                    }
+                } // End of else of if (ipa[mode] < 0)
+                
+            } // End of else of if ( bsize == 4 )
+
+            // Load iIdx and iFact
+            iIdx[ty][tx] = ((ty+1) * ipa[mode]) >> 5;
+            iFact[ty][tx] = ((ty+1) * ipa[mode]) & 31;
+
+            if ( iFact[ty][tx] != 0 )
+            {
+                predSamplesY[ty][tx] = ((32 - iFact[ty][tx]) * refY[tx + iIdx[ty][tx] + 1] + iFact[ty][tx] * refY[tx + iIdx[ty][tx] + 2] + 16) >> 5;
+                predSamplesCr[ty][tx] = ((32 - iFact[ty][tx]) * refCr[tx + iIdx[ty][tx] + 1] + iFact[ty][tx] * refCr[tx + iIdx[ty][tx] + 2] + 16) >> 5;
+                predSamplesCb[ty][tx] = ((32 - iFact[ty][tx]) * refCb[tx + iIdx[ty][tx] + 1] + iFact[ty][tx] * refCb[tx + iIdx[ty][tx] + 2] + 16) >> 5;
+            } 
+            else
+            {
+                predSamplesY[ty][tx] = refY[tx + iIdx[ty][tx] + 1];
+                predSamplesCr[ty][tx] = refCr[tx + iIdx[ty][tx] + 1];
+                predSamplesCb[ty][tx] = refCb[tx + iIdx[ty][tx] + 1];
+            }
+
+            if ( mode == ANGULAR_26 && bsize < 32 )
+            {
+                if ( 0 == tx ) 
+                    predSamplesY[ty][tx] = clip1Y(selxy[tx] + ((selyy[ty] - selyy[MINUS]) >> 1));
+
+                __syncthreads();
+
+            } // End of if ( mode == ANGULAR_26 && bsize < 32 )
+
+        } // End of else if ( mode >= ANGULAR_18 )
+
+        else if ( mode > DC_MODE && mode < ANGULAR_18 )
+        {
+            if ( 4 = bsize )
+            {
+
+                if ( 0 == ty )
+                {
+                    refY[tx] = selyy[-1 + tx];
+                    refCr[tx] = pycr[-1 + tx];
+                    refCb[tx] = pycb[-1 + tx];
+                    if ( 0 == tx )
+                    {
+                        refY[bsize+tx] = selyy[-1 + (tx + bsize)];
+                        refCr[bsize+tx] = pycr[-1 + (tx + bsize)];
+                        refCb[bsize+tx] = pycb[-1 + (tx + bsize)];
+                    }
+                }
+
+                if (ipa[mode] < 0)
+                {
+                    if ( ((bsize * ipa[mode]) >> 5) < -1 )
+                    {
+                        if ( 1 == ty )
+                        {
+                            refY[-(tx + 1)] = selxy[ -1 + (( tx + 1 ) * ia[mode] + 128) >> 8];
+                        }
+                        if ( 2 == ty )
+                        {
+                            refCr[-(tx + 1)] = pxcr[ -1 + (( tx + 1 ) * ia[mode] + 128) >> 8];
+                            refCb[-(tx + 1)] = pxcb[ -1 + (( tx + 1 ) * ia[mode] + 128) >> 8];
+                        }
+                    } // End of if ( ((bsize * ipa[mode]) >> 5) < -1 )
+                } // End of if (ipa[mode] < 0)
+                else
+                {
+                    if ( 3 == ty )
+                    {
+                        refY[tx + bsize + 1] = selyy[-1 + tx + bsize + 1];
+                        refCr[tx + bsize + 1] = pycr[-1 + tx + bsize + 1];
+                        refCb[tx + bsize + 1] = pycb[-1 + tx + bsize + 1];
+                    }
+                } // End of else of if (ipa[mode] < 0)
+
+            } // End of if ( 4 == bsize )
+            else
+            {
+ 
+                if ( 0 == ty )
+                {
+                    ref[tx] = selyy[-1 + tx];
+                    if ( 0 == tx )
+                        refY[bsize + tx] = selyy[-1 + (tx + bsize)];
+                }
+                if ( 1 == ty )
+                {
+                    refCr[tx] = pycr[-1 + tx];
+                    if ( 0 == tx )
+                        refCr[bsize+tx] = pycr[-1 + (tx + bsize)];
+                }
+                if ( 2 == ty )
+                {
+                    refCb[tx] = pycb[-1 + tx];
+                    if ( 0 == tx )
+                        refCb[bsize+tx] = pycb[-1 + (tx + bsize)];
+                }
+                if (ipa[mode] < 0)
+                {
+                    if ( ((bsize * ipa[mode]) >> 5) < -1 )
+                    {
+                        if ( 3 == ty )
+                        {
+                            refY[-(tx + 1)] = selxy[ -1 + (( tx + 1 ) * ia[mode] + 128) >> 8];
+                        }
+                        if ( 4 == ty )
+                        {
+                            refCr[-(tx + 1)] = pxcr[ -1 + (( tx + 1 ) * ia[mode] + 128) >> 8];
+                        }
+                        if ( 5 == ty )
+                        {
+                            refCb[-(tx + 1)] = pxcb[ -1 + (( tx + 1 ) * ia[mode] + 128) >> 8];
+                        }
+                    } // End of if ( ((bsize * ipa[mode]) >> 5) < -1 )
+                } // End of if (ipa[mode] < 0)
+                else
+                {
+                    if ( 6 == ty )
+                        refY[tx + bsize + 1] = selyy[-1 + tx + bsize + 1];
+                    if ( 7 == ty )
+                    {
+                        refCr[tx + bsize + 1] = pycr[-1 + tx + bsize + 1];
+                        if ( bsize == 8 )
+                            refCb[tx + bsize + 1] = pycb[-1 + tx + bsize + 1];
+                    }
+                    if ( 8 == ty && bsize != 8 )
+                        refCb[tx + bsize + 1] = pycb[-1 + tx + bsize + 1];
+                    }
+                } // End of else of if (ipa[mode] < 0)
+                
+            } // End of else of if ( 4 == bsize )
+
+            // Load iIdx and iFact
+            iIdx[ty][tx] = ( (tx + 1) * ipa[mode] ) >> 5;
+            iFact[ty][tx] = ( (tx + 1) * ipa[mode] ) & 31;
+
+            if ( iFact[ty][tx] != 0 )
+            {
+                predSamplesY[ty][tx] = ((32 - iFact[ty][tx]) * refY[ty + iIdx[ty][tx] + 1] + iFact[ty][tx] * refY[ty + iIdx[ty][tx] + 2] + 16) >> 5;
+                predSamplesCr[ty][tx] = ((32 - iFact[ty][tx]) * refCr[ty + iIdx[ty][tx] + 1] + iFact[ty][tx] * refCr[ty + iIdx[ty][tx] + 2] + 16) >> 5;
+                predSamplesCb[ty][tx] = ((32 - iFact[ty][tx]) * refCb[ty + iIdx[ty][tx] + 1] + iFact[ty][tx] * refCb[ty + iIdx[ty][tx] + 2] + 16) >> 5;
+            }
+            else
+            {
+                predSamplesY[ty][tx] = refY[ty + iIdx[ty][tx] + 1];
+                predSamplesCr[ty][tx] = refCr[ty + iIdx[ty][tx] + 1];
+                predSamplesCb[ty][tx] = refCb[ty + iIdx[ty][tx] + 1];
+            }
+
+            if ( mode == ANGULAR_10 && bsize < 32 )
+            {
+                if ( 0 == tx )
+                    predSamplesY[ty][tx] = clip1Y(selyy[ty] + ((selxy[tx] - selyy[MINUS]) >> 1));
+
+                __syncthreads();
+
+            } // End of if ( mode == ANGULAR_10 && bsize < 32 )
+
+        } // End of else if ( mode > ANGULAR_1 && mode < ANGULAR_18 )
+
+    } // End of for(int mode =0;mode <35;mode++)
 
     
 
