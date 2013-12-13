@@ -1149,7 +1149,8 @@ ece408_intra_pred_result *ece408_competition(ece408_frame *imgs, int num_frames)
                 // Block dimension
                 dim3 dimBlock = dim3(luma_size, luma_size, 1);
 
-                hevcPredictionKernel<<<dimGrid, dimBlock>>>(d_y, d_cr, d_cb, d_res_y, d_res_cr, d_res_cb, d_y_modes, d_cr_modes, d_cb_modes );
+                int neighbour_array_size = luma_size*2 + 1;
+                hevcPredictionKernel<<<dimGrid, dimBlock, (neighbour_array_size * sizeof(uint8_t))>>>(d_y, d_cr, d_cb, d_res_y, d_res_cr, d_res_cb, d_y_modes, d_cr_modes, d_cb_modes,imgs->width);
 
                 cuda_ret = cudaDeviceSynchronize();
                 if ( cuda_ret != cudaSuccess )
