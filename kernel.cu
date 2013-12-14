@@ -127,6 +127,14 @@ __device__ void extract(int32_t *sorted_values, int32_t *res, uint8_t *modes)
 //////////////  KERNEL FUNCTION  /////////////////////
 //////////////////////////////////////////////////////
 //////////////////////////////////////////////////////
+/*
+__global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32_t *res_y, int32_t *res_cr, int32_t *res_cb, uint8_t *y_modes, uint8_t *cr_modes, uint8_t *cb_modes, int height, int width)
+{
+ printf("\nYUP I AM HERE\n");
+
+}
+*/
+
 __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32_t *res_y, int32_t *res_cr, int32_t *res_cb, uint8_t *y_modes, uint8_t *cr_modes, uint8_t *cb_modes, int height, int width)
 {
 
@@ -143,15 +151,20 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
     int col = tx + blockDim.x * bx; 
     int row = ty + blockDim.y * by;
 
+    if ( 0 == tx && 0 == ty  && row == 0 && col == 0)
+        printf("\n YUP I AM HERE \n");
+
     // Shared neighbour memory
-    int neighbourArraySize = (MAX_BLOCK_SIZE * TWO) + ONE;
+    int neighbourArraySize = (bsize * TWO) + ONE;
 
     int bitDepthY=BITDEPTHY;
     int bitDepthC=BITDEPTHC;
 
     int rowToBeLoaded=0;
     int colToBeLoaded=0;
-
+    int var = 3;
+    int var1 =  3;
+    
     /////////
     // Neighbour Array
     ////////
@@ -159,15 +172,15 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
     // x is horizontal component
 
     // Neigbour Array for luma component
-    extern __device__ __shared__ uint8_t p_yy[];
-    extern __device__ __shared__ uint8_t p_xy[];
+    __device__ __shared__ uint8_t p_yy[MAX_BLOCK_SIZE*2+1];
+    __device__ __shared__ uint8_t p_xy[MAX_BLOCK_SIZE*2+1];
 
     // Neighbour array for chroma component 
-    extern __device__ __shared__ uint8_t p_ycr[];
-    extern __device__ __shared__ uint8_t p_ycb[];
-    extern __device__ __shared__ uint8_t p_xcr[];
-    extern __device__ __shared__ uint8_t p_xcb[];
-
+    __device__ __shared__ uint8_t p_ycr[MAX_BLOCK_SIZE*2+1];
+    __device__ __shared__ uint8_t p_ycb[MAX_BLOCK_SIZE*2+1];
+    __device__ __shared__ uint8_t p_xcr[MAX_BLOCK_SIZE*2+1];
+    __device__ __shared__ uint8_t p_xcb[MAX_BLOCK_SIZE*2+1];
+   
     // Pointer to neighbour elements in shared memory
     uint8_t *pyy = &p_yy[ONE];
     uint8_t *pxy = &p_xy[ZERO];
@@ -179,12 +192,34 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
     // Points to the righ top most block for which all
     // the neighbour elements fall outside the image boundaries
     unsigned int fallOutside = 0;
-
+    
     // This is to take care of the top right corner blocks in the grid
     // OPTIMIZATION
     if ( (0 == bx && 0 == by) )
          fallOutside = 1;
 
+    /// DEBUG
+    //if ( fallOutside )
+        //printf("\nI AM FALLING OUTSIDE\n");
+
+    /// DEBUG
+    /*
+    if ( blockIdx.x == 0  && by == 0 && tx == 0 && ty == 0 )
+    {
+    printf("\nINPUT MATRIX WIDTH: %d HEIGHT: %d\n", width, height);
+    for ( int i = 0 ; i < width; i++)
+    {
+        for (int j = 0; j < height; j++ )
+        {
+             printf("\t%u", y[i*width+j]);
+        }
+        printf("\n");
+    }
+    }
+
+    __syncthreads();
+    */
+    
     //////////////////////////////////
     //////////////////////////////////
     // Step 1: LOAD NEIGHBOUR ELEMENTS
@@ -195,59 +230,83 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
     // The loading is done based on a row basis
 
     // Load luma elements
-    if ( ZERO == row )
+    if ( ZERO == ty )
     {
         rowToBeLoaded=row-1;
         colToBeLoaded=col;
 
-        if(rowToBeLoaded>=0 && rowToBeLoaded<height && colToBeLoaded>=0 && colToBeLoaded<width)
+        /// DEBUG
+        /*
+        if ( var == bx && var1 == by )
+           printf("\nRow: %d col: %d rowTO: %d colTO: %d\n", row, col, rowToBeLoaded, colToBeLoaded);
+        */
+
+        if((rowToBeLoaded>=0 && rowToBeLoaded<height && colToBeLoaded>=0 && colToBeLoaded<width) || fallOutside)
         { 
             pxy[tx] = (fallOutside == 1) ? (1 << (bitDepthY -1)) : y[(rowToBeLoaded*width)+colToBeLoaded];  
             pxcr[tx] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : cr[(rowToBeLoaded*width)+colToBeLoaded];
             pxcb[tx] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : cb[(rowToBeLoaded*width)+colToBeLoaded];
         }
     }
-    else if ( ONE == row )
+    else if ( ONE == ty )
     {
         rowToBeLoaded=row-2;
         colToBeLoaded=col+blockDim.x;
 
-        if(rowToBeLoaded>=0 && rowToBeLoaded<height && colToBeLoaded>=0 && colToBeLoaded<width)
+        /// DEBUG
+        /*
+        if ( var == bx && var1 == by )
+           printf("\nRow: %d col: %d rowTO: %d colTO: %d\n", row, col, rowToBeLoaded, colToBeLoaded);
+        */
+
+        if((rowToBeLoaded>=0 && rowToBeLoaded<height && colToBeLoaded>=0 && colToBeLoaded<width) || fallOutside)
         { 
-    	    pxy[tx + bsize] = (fallOutside == 1) ? (1 << (bitDepthY)) : y[(rowToBeLoaded*width)+colToBeLoaded];
+    	    pxy[tx + bsize] = (fallOutside == 1) ? (1 << (bitDepthY - 1)) : y[(rowToBeLoaded*width)+colToBeLoaded];
             pxcr[tx + bsize] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : (cr[(rowToBeLoaded*width)+colToBeLoaded]);
             pxcb[tx + bsize] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : (cb[(rowToBeLoaded*width)+colToBeLoaded]);
         }
     }
-    else if ( TWO == row )
+    else if ( TWO == ty )
     {
         rowToBeLoaded=(row-2)+tx;
         colToBeLoaded=blockDim.x*blockIdx.x-1;
 
-        if(rowToBeLoaded>=0 && rowToBeLoaded<height && colToBeLoaded>=0 && colToBeLoaded<width)
+        /// DEBUG
+        /*
+        if ( var == bx && var1 == by )
+           printf("\nRow: %d col: %d rowTO: %d colTO: %d\n", row, col, rowToBeLoaded, colToBeLoaded);
+        */
+
+        if((rowToBeLoaded>=0 && rowToBeLoaded<height && colToBeLoaded>=0 && colToBeLoaded<width) || fallOutside)
         { 
-            pyy[ty] = (fallOutside == 1) ? (1 << (bitDepthY)) : y[rowToBeLoaded* + colToBeLoaded];
-            pycr[ty] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : (cr[rowToBeLoaded*width + colToBeLoaded]);
-            pycb[ty] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : (cb[rowToBeLoaded*width + colToBeLoaded]);
+            pyy[tx] = (fallOutside == 1) ? (1 << (bitDepthY - 1)) : y[rowToBeLoaded*width + colToBeLoaded];
+            pycr[tx] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : (cr[rowToBeLoaded*width + colToBeLoaded]);
+            pycb[tx] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : (cb[rowToBeLoaded*width + colToBeLoaded]);
         }
     }
-    else if ( THREE == row )
+    else if ( THREE == ty )
     {
         rowToBeLoaded=(row+1)+tx;
         colToBeLoaded=blockIdx.x*blockDim.x-1;
 
-        if(rowToBeLoaded>=0 && rowToBeLoaded<height && colToBeLoaded>=0 && colToBeLoaded<width)
+        /// DEBUG
+        /*
+        if ( var == bx && var1 == by )
+           printf("\nRow: %d col: %d rowTO: %d colTO: %d\n", row, col, rowToBeLoaded, colToBeLoaded);
+        */
+
+        if((rowToBeLoaded>=0 && rowToBeLoaded<height && colToBeLoaded>=0 && colToBeLoaded<width) || fallOutside)
         { 
-            pyy[ty + bsize] = (fallOutside == 1) ? (1 << (bitDepthY)) : y[rowToBeLoaded*width + colToBeLoaded];
-            pycr[ty + bsize] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : (cr[rowToBeLoaded*width + colToBeLoaded]);
-            pycb[ty + bsize] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : (cb[rowToBeLoaded *width + colToBeLoaded]);
+            pyy[tx + bsize] = (fallOutside == 1) ? (1 << (bitDepthY - 1)) : y[rowToBeLoaded*width + colToBeLoaded];
+            pycr[tx + bsize] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : (cr[rowToBeLoaded*width + colToBeLoaded]);
+            pycb[tx + bsize] = (fallOutside == 1) ? (1 << (bitDepthC - 1)) : (cb[rowToBeLoaded *width + colToBeLoaded]);
         }
     }
     else
     {
         // Nothing to do here
     }
-
+    
     // This is to load the extra guy in the neighbour element array
     // who is not filled by the threads in the current block
     // i.e. the extra element in the pyy, pycr, pycb array
@@ -266,9 +325,33 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
                 pycb[MINUS] = y[(rowToBeLoaded-1)*width + (colToBeLoaded-1)];
             }
         } // End of if ( ! ((0 == bx) || (0 == by)) )
+        if ( fallOutside) 
+        {
+            pyy[MINUS] = 1 << (bitDepthY - 1);
+            pycr[MINUS] = 1 << (bitDepthC - 1);
+            pycb[MINUS] = 1 << (bitDepthC - 1);
+        }
     } // End of if ( 0 == tx && 0 == ty )
 
     __syncthreads();
+
+    /// DEBUG
+    /*
+    if ( blockIdx.x == var && blockIdx.y == var1 && tx == 0 && ty == 0 )
+    {
+    printf("\nPREDICTED MATRIX - PYY\n");
+    for ( int i = 0 ; i < 2*bsize+1; i++)
+    {
+             printf("\t%u", p_yy[i]);
+    }
+    printf("\nPREDICTED MATRIX - PXY\n");
+    for ( int i = 0 ; i < 2*bsize; i++)
+    {
+             printf("\t%u", p_xy[i]);
+    }
+    }
+    */
+ 
 
  
     //////////////////////////
@@ -284,7 +367,7 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
         {
             if(bx==ZERO)
             {
-                for(int i=0;i<neighbourArraySize;i++)
+                for(int i=0;i<neighbourArraySize-1;i++)
                 {
                     pyy[i]=pxy[ZERO];
                     pycr[i] = pxcr[ZERO];
@@ -296,18 +379,15 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
             }
             else
             {
-                for(int i=bsize;i<=(2*bsize-1);i++)
+                for(int i=bsize;i<(2*bsize);i++)
                 {
                     pyy[i]=pyy[bsize-ONE];
                     pycr[i] = pycr[bsize-ONE];
                     pycb[i] = pycb[bsize-ONE];
                 }
-                pyy[MINUS] = pyy[bsize-ONE];
-                pycr[MINUS] = pyy[bsize-ONE];
-                pycb[MINUS] = pyy[bsize-ONE];
             }
          } // End of if (by==(gridDim.y-1))
-         if(0==by)
+         if(0==by && !fallOutside)
          {
              pyy[MINUS]=pyy[ZERO];
              pycr[MINUS] = pycr[ZERO];
@@ -321,7 +401,7 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
          } // End of if ( 0 == by )
          if((bx == (gridDim.x - 1)) && (0 != by))
          {
-             for ( int i = bsize; i < (2 * bsize - 1); i++ )
+             for ( int i = bsize; i < (2 * bsize); i++ )
              {
                  pxy[i] = pxy[bsize - 1];
                  pxcr[i] = pxcr[bsize - 1];
@@ -332,6 +412,22 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
   
     __syncthreads();
 
+    /// DEBUG
+    if ( blockIdx.x == var && blockIdx.y == var1 && tx == 0 && ty == 0 )
+    {
+    printf("\nPREDICTED MATRIX - PYY\n");
+    for ( int i = 0 ; i < 2*bsize+1; i++)
+    {
+             printf("\t%u", p_yy[i]);
+    }
+    printf("\nPREDICTED MATRIX - PXY\n");
+    for ( int i = 0 ; i < 2*bsize; i++)
+    {
+             printf("\t%u", p_xy[i]);
+    }
+    }
+
+/*
     /////////////////////////////////////////////////
     /////////////////////////////////////////////////
     // STEP 3 : MODE COMPUTATION AND SECOND FILTERING
@@ -342,8 +438,8 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
     /////////
     // Second Filtered neighbour array
     /////////
-    extern __device__ __shared__ uint8_t pf_yy[];
-    extern __device__ __shared__ uint8_t pf_xy[];   
+    __device__ __shared__ uint8_t pf_yy[MAX_BLOCK_SIZE*2+1];
+    __device__ __shared__ uint8_t pf_xy[MAX_BLOCK_SIZE*2+1];   
   
     ////////
     // Predicted pixels
@@ -979,5 +1075,7 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
     
 
     
-
+*/
 } // End of kernel function hevcPredictionKernel()
+
+

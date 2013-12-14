@@ -997,8 +997,13 @@ bool ece408_compare(ece408_intra_pred_result *ref, ece408_intra_pred_result *stu
 ece408_intra_pred_result *ece408_competition(ece408_frame *imgs, int num_frames) {
 	//Fill in your own!
 	(void)imgs;
+
+        ece408_frame * imgs1 = (ece408_frame *)imgs;
 	ece408_intra_pred_result *ret = new ece408_intra_pred_result[4*num_frames]; //8x8,16x16,32x32,64x64
 	ece408_intra_pred_result *cur_result = ret;
+         
+        unsigned int debug_print = ((imgs->height+4-1)/4)*((imgs->width+4-1)/4);
+        printf("debug print : %d\n",debug_print );
 
         cudaError_t cuda_ret;
 
@@ -1006,7 +1011,8 @@ ece408_intra_pred_result *ece408_competition(ece408_frame *imgs, int num_frames)
                 *d_cr,
                 *d_cb;
 
-        unsigned int y_size = ((imgs->width) * (imgs->height));
+        unsigned int y_size = ((imgs->width) * (imgs->height)) * sizeof(uint8_t);
+        printf("\n Y SIZE : %u\n", y_size);
         unsigned int cr_size,
                      cb_size;
 
@@ -1042,26 +1048,28 @@ ece408_intra_pred_result *ece408_competition(ece408_frame *imgs, int num_frames)
             exit(EXIT_FAILURE);
         }
 
-        cuda_ret = cudaMemcpy(d_y, imgs->y, y_size, cudaMemcpyHostToDevice);
+        cuda_ret = cudaMemcpy(d_y, imgs1->y, y_size, cudaMemcpyHostToDevice);
         if ( cuda_ret != cudaSuccess )
         {
             printf("\n%s in %s at line %d\n", cudaGetErrorString(cuda_ret), __FILE__, __LINE__);
             exit(EXIT_FAILURE);
         }
 
-        cuda_ret = cudaMemcpy(d_cr, imgs->cr, cr_size, cudaMemcpyHostToDevice);
+        cuda_ret = cudaMemcpy(d_cr, imgs1->cr, cr_size, cudaMemcpyHostToDevice);
         if ( cuda_ret != cudaSuccess )
         {
             printf("\n%s in %s at line %d\n", cudaGetErrorString(cuda_ret), __FILE__, __LINE__);
             exit(EXIT_FAILURE);
         }
 
-        cuda_ret = cudaMemcpy(d_cb, imgs->cb, cb_size, cudaMemcpyHostToDevice);
+        cuda_ret = cudaMemcpy(d_cb, imgs1->cb, cb_size, cudaMemcpyHostToDevice);
         if ( cuda_ret != cudaSuccess )
         {
             printf("\n%s in %s at line %d\n", cudaGetErrorString(cuda_ret), __FILE__, __LINE__);
             exit(EXIT_FAILURE);
         }
+
+        printf("I AM AT THE END CUDA MEMCPY STAGE 1\n");
 
         cuda_ret = cudaDeviceSynchronize();
         if ( cuda_ret != cudaSuccess )
@@ -1076,7 +1084,8 @@ ece408_intra_pred_result *ece408_competition(ece408_frame *imgs, int num_frames)
 		//for(int luma_size_shift = 2; luma_size_shift <= 5; luma_size_shift++) {
                 for(int luma_size_shift = 2; luma_size_shift <=2; luma_size_shift++) {
 	        int luma_size = 1 << luma_size_shift; // luma_size x luma_size luma PBs
-	        cur_result->create(32, 32, luma_size);
+	        //cur_result->create(32, 32, luma_size);
+	        cur_result->create(imgs1->width, imgs1->height, luma_size);
 
                 // Start
  
@@ -1088,11 +1097,13 @@ ece408_intra_pred_result *ece408_competition(ece408_frame *imgs, int num_frames)
                 uint8_t *d_cb_modes;
 
                 //unsigned int y_res_size = (35 * (cur_result->num_blocks)); 
-                unsigned int y_res_size = ((imgs->height+luma_size-1)/luma_size)*((imgs->width+luma_size-1)/luma_size); 
+                unsigned int num_blocks = ((imgs->height+luma_size-1)/luma_size)*((imgs->width+luma_size-1)/luma_size); 
+                unsigned int y_res_size = 35*num_blocks*sizeof(int32_t); 
+                unsigned int mode_size = 35*num_blocks*sizeof(uint8_t);
                 unsigned int cr_res_size,
                              cb_res_size;
 
-               printf("No.of blocks launched:%u\n",y_res_size);
+                printf("No.of blocks launched:%u\n",y_res_size/sizeof(int32_t));
                 cr_res_size = cb_res_size = y_res_size;
 
                 // Allocate result in the device 
@@ -1103,7 +1114,7 @@ ece408_intra_pred_result *ece408_competition(ece408_frame *imgs, int num_frames)
                     exit(EXIT_FAILURE);
                 }
 
-                cuda_ret = cudaMalloc((void **) &d_y_modes, y_res_size);
+                cuda_ret = cudaMalloc((void **) &d_y_modes, mode_size);
                 if ( cuda_ret != cudaSuccess )
                 {
                     printf("\n%s in %s at line %d\n", cudaGetErrorString(cuda_ret), __FILE__, __LINE__);
@@ -1126,14 +1137,14 @@ ece408_intra_pred_result *ece408_competition(ece408_frame *imgs, int num_frames)
                         exit(EXIT_FAILURE);
                     }
 
-                    cuda_ret = cudaMalloc((void **) &d_cr_modes, cr_res_size);
+                    cuda_ret = cudaMalloc((void **) &d_cr_modes, mode_size);
                     if ( cuda_ret != cudaSuccess )
                     {
                         printf("\n%s in %s at line %d\n", cudaGetErrorString(cuda_ret), __FILE__, __LINE__);
                         exit(EXIT_FAILURE);
                     }
 
-                    cuda_ret = cudaMalloc((void **) &d_cb_modes, cb_res_size);
+                    cuda_ret = cudaMalloc((void **) &d_cb_modes, mode_size);
                     if ( cuda_ret != cudaSuccess )
                     {
                         printf("\n%s in %s at line %d\n", cudaGetErrorString(cuda_ret), __FILE__, __LINE__);
@@ -1154,9 +1165,11 @@ ece408_intra_pred_result *ece408_competition(ece408_frame *imgs, int num_frames)
                 // Block dimension
                 dim3 dimBlock = dim3(luma_size, luma_size, 1);
 
-                int neighbour_array_size = luma_size*2+1;
-                hevcPredictionKernel<<<dimGrid, dimBlock, (neighbour_array_size * sizeof(uint8_t))>>>(d_y, d_cr, d_cb, d_res_y, d_res_cr, d_res_cb, d_y_modes, d_cr_modes, d_cb_modes, imgs->height, imgs->width);
+                //int neighbour_array_size = luma_size*2+1;
 
+                printf("\n KERNEL CONFIG: %d %d %d %d\n", dimGrid.x, dimGrid.y, dimBlock.x, dimBlock.y);
+                hevcPredictionKernel<<<dimGrid, dimBlock>>>(d_y, d_cr, d_cb, d_res_y, d_res_cr, d_res_cb, d_y_modes, d_cr_modes, d_cb_modes, imgs->height, imgs->width);
+         
                 cuda_ret = cudaDeviceSynchronize();
                 if ( cuda_ret != cudaSuccess )
                 {
@@ -1164,13 +1177,16 @@ ece408_intra_pred_result *ece408_competition(ece408_frame *imgs, int num_frames)
                     exit(EXIT_FAILURE);
                 }
 
+               printf("current result num_block_size is %d\n", num_blocks);
+               printf("from serial code num_block is %d\n",cur_result->num_blocks);
+               
                 cuda_ret = cudaMemcpy(cur_result->y_satd_results, d_res_y, y_res_size, cudaMemcpyDeviceToHost);
                 if ( cuda_ret != cudaSuccess )
                 {
                     printf("\n%s in %s at line %d\n", cudaGetErrorString(cuda_ret), __FILE__, __LINE__);
                     exit(EXIT_FAILURE);
                 }
-
+                /*
                 cuda_ret = cudaMemcpy(cur_result->cr_satd_results, d_res_cr, cr_res_size, cudaMemcpyDeviceToHost);
                 if ( cuda_ret != cudaSuccess )
                 {
@@ -1205,6 +1221,8 @@ ece408_intra_pred_result *ece408_competition(ece408_frame *imgs, int num_frames)
                     printf("\n%s in %s at line %d\n", cudaGetErrorString(cuda_ret), __FILE__, __LINE__);
                     exit(EXIT_FAILURE);
                 }
+                */
+                
 
 	        cur_result++;
                 res_count++;
