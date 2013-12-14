@@ -35,6 +35,18 @@
 #define TOTAL_MODES 35
 #define MAX_BLOCK_SIZE 32
 #define IA_MODES 16
+#define BITS_PER_SUM (8 * sizeof(sum_t))
+
+#define HADAMARD4(d0, d1, d2, d3, s0, s1, s2, s3) { \
+         sum2_t t0 = s0 + s1; \
+         sum2_t t1 = s0 - s1; \
+         sum2_t t2 = s2 + s3; \
+         sum2_t t3 = s2 - s3; \
+         d0 = t0 + t2; \
+         d2 = t0 - t2; \
+         d1 = t1 + t3; \
+         d3 = t1 - t3; \
+}
 
 #define abs(x) ( ( (x) < 0 ) ? -(x) : (x) )
 #define min(x,y) ( (x) < (y) ? (x) : (y) )
@@ -77,6 +89,38 @@ __device__ uint8_t clip1Y(uint8_t x)
     return ret;
 
 } // End of clip1Y()
+
+__device__ sum2_t abs2(sum2_t a)
+{
+    sum2_t s = ((a >> (BITS_PER_SUM - 1)) & (((sum2_t)1 << BITS_PER_SUM) + 1)) * ((sum_t)-1);
+    return (a + s) ^ s;
+}
+
+__device__ void sort(int32_t*  input_values)
+{
+        for(int i =0;i<TOTAL_MODES;i++)
+        {
+            int j=i;
+            while(j>0 && input_values[j] < input_values[j-1])
+            {
+                int32_t temp=input_values[j];
+                input_values[j]=input_values[j-1];
+                input_values[j-1]=temp;
+                j--;
+            }
+        }    
+} // End of sort()
+
+__device__ void extract(int32_t *sorted_values, int32_t *res, uint8_t *modes)
+{
+   for ( int counter = 0; counter < TOTAL_MODES; counter++)
+   {
+       uint8_t mode = sorted_values[counter] >> 8 & 0XFF;
+       int32_t value = sorted_values[counter] >> 8;
+       res[counter] = value;
+       modes[counter] = mode;
+   }
+} // End of extract()
 
 //////////////////////////////////////////////////////
 //////////////////////////////////////////////////////
@@ -311,6 +355,22 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
     // Pointer to predicted pixels
     uint8_t *pfyy = &pf_yy[ONE];
     uint8_t *pfxy = &pf_xy[ZERO];
+
+    //////
+    // Hadamard shared memory
+    //////
+    __device__ __shared__ uint8_t ay[MAX_BLOCK_SIZE][MAX_BLOCK_SIZE];
+    __device__ __shared__ uint8_t acr[MAX_BLOCK_SIZE][MAX_BLOCK_SIZE];
+    __device__ __shared__ uint8_t acb[MAX_BLOCK_SIZE][MAX_BLOCK_SIZE];
+    __device__ __shared__ uint8_t hby[MAX_BLOCK_SIZE][MAX_BLOCK_SIZE/2];
+    __device__ __shared__ uint8_t bcr[MAX_BLOCK_SIZE][MAX_BLOCK_SIZE/2];
+    __device__ __shared__ uint8_t bcb[MAX_BLOCK_SIZE][MAX_BLOCK_SIZE/2];
+    __device__ __shared__ int32_t y_satd_shared[TOTAL_MODES];
+    __device__ __shared__ int32_t cr_satd_shared[TOTAL_MODES];
+    __device__ __shared__ int32_t cb_satd_shared[TOTAL_MODES];
+    __device__ __shared__ int32_t y_modes_shared[TOTAL_MODES];
+    __device__ __shared__ int32_t cr_modes_shared[TOTAL_MODES];
+    __device__ __shared__ int32_t cb_modes_shared[TOTAL_MODES];
    
     // Loop through all modes
     for(int mode =0;mode <35;mode++)
@@ -814,6 +874,110 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
 
         } // End of else if ( mode > ANGULAR_1 && mode < ANGULAR_18 )
 
+      
+        ///////////////////
+        // STEP 4: HADAMARD
+        ///////////////////
+        // finally calculation of SATD values for different modes
+        // have A matrix which is a shared memory
+        // all the threads fill the 'A' array
+
+        if(bsize == 4)
+        {
+           // everybody computes the difference of pixels
+           ay[ty][tx]  = predSamplesY[ty][tx]  - y[row*width + col];
+           acr[ty][tx] = predSamplesCr[ty][tx] - cr[row*width + col];
+           acb[ty][tx] = predSamplesCb[ty][tx] - cb[row*width + col];
+
+           // construct the B-matrix : 8 threads are working
+           if(tx < 2)
+           {
+               hby[ty][tx] = (ay[ty][2*tx] + ay[ty][2*tx + 1]) + ((ay[ty][2*tx] - ay[ty][2*tx + 1]) << BITS_PER_SUM);
+               bcr[ty][tx] = (acr[ty][2*tx] + acr[ty][2*tx + 1]) + ((acr[ty][2*tx] - acr[ty][2*tx+1]) << BITS_PER_SUM);
+               bcb[ty][tx] = (acb[ty][2*tx] + acb[ty][2*tx + 1]) + ((acb[ty][2*tx] - acb[ty][2*tx+1]) << BITS_PER_SUM);
+           }
+
+           __syncthreads();
+
+           if(tx == 3)
+           {  
+               // 4 threads work to calculate the value
+               if(ty == 0)
+               {
+                  int a0 = ay[3][0];
+                  int a1 = ay[3][1];
+                  int a2 = ay[3][2];
+                  int a3 = ay[3][3];
+
+                  int sumy  = 0 ;
+                  int symcr = 0 ;
+                  int sumcb = 0 ;
+
+                  for (int i = 0; i < 2; i++)
+                  {
+                      HADAMARD4(a0,a1,a2,a3, hby[0][i], hby[1][i], hby[2][i], hby[3][i]);
+                      a0 = abs2(a0) + abs2(a1) + abs2(a2) + abs2(a3);
+                      y_satd_shared[mode] += ((sum_t)a0) + (a0 >> BITS_PER_SUM);
+                  }
+                  y_satd_shared[mode] = (y_satd_shared[mode] << 8) | mode;
+              }
+              if(ty == 1)
+              {
+
+                  int a0 = acr[3][0];
+                  int a1 = acr[3][1];
+                  int a2 = acr[3][2];
+                  int a3 = acr[3][3];
+
+                  for (int i = 0; i < 2; i++)
+                  {
+                      HADAMARD4(a0,a1,a2,a3, bcr[0][i], bcr[1][i], bcr[2][i], bcr[3][i]);
+                      a0 = abs2(a0) + abs2(a1) + abs2(a2) + abs2(a3);
+                      cr_satd_shared[mode] += (a0) + (a0 >> BITS_PER_SUM);
+                  }
+                  cr_satd_shared[mode] = (cr_satd_shared[mode] << 8) | mode;
+              }
+              if(ty == 2)
+              {
+
+                  int a0 = acb[3][0];
+                  int a1 = acb[3][1];
+                  int a2 = acb[3][2];
+                  int a3 = acb[3][3];
+
+                  for (int i = 0; i < 2; i++)
+                  {
+                      HADAMARD4(a0,a1,a2,a3, bcb[0][i], bcb[1][i], bcb[2][i], bcb[3][i]);
+                      a0 = abs2(a0) + abs2(a1) + abs2(a2) + abs2(a3);
+                      cb_satd_shared[mode] += (a0) + (a0 >> BITS_PER_SUM);
+                  }
+                  cb_satd_shared[mode] = (cb_satd_shared[mode] << 8) | mode;
+              }
+          }      
+          // TO DO : Also store the sum values appropriately into the resultant array
+          // TO DO : Write the same HADAMARD4 macro from the serial code
+
+       }  // if ( 4 == bsize) // end of SATD 4 COMPUTATION
+
+        
     } // End of for(int mode =0;mode <35;mode++)
+    
+    __syncthreads();
+
+    if ( 0 == ty && 0 == tx )
+    {
+       sort(y_satd_shared);
+       extract(y_satd_shared, res_y, y_modes);
+
+       sort(cr_satd_shared);
+       extract(cr_satd_shared, res_cr, cr_modes);
+
+       sort(cb_satd_shared);
+       extract(cb_satd_shared, res_cb, cb_modes);
+    }
+
+    
+
+    
 
 } // End of kernel function hevcPredictionKernel()
