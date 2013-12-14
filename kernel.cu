@@ -413,6 +413,7 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
     __syncthreads();
 
     /// DEBUG
+    /*
     if ( blockIdx.x == var && blockIdx.y == var1 && tx == 0 && ty == 0 )
     {
     printf("\nPREDICTED MATRIX - PYY\n");
@@ -426,8 +427,9 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
              printf("\t%u", p_xy[i]);
     }
     }
+    */
 
-/*
+
     /////////////////////////////////////////////////
     /////////////////////////////////////////////////
     // STEP 3 : MODE COMPUTATION AND SECOND FILTERING
@@ -468,6 +470,7 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
     __device__ __shared__ int32_t cr_modes_shared[TOTAL_MODES];
     __device__ __shared__ int32_t cb_modes_shared[TOTAL_MODES];
    
+    
     // Loop through all modes
     for(int mode =0;mode <35;mode++)
     {
@@ -521,33 +524,43 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
                 // B INT FLAG
                 /////////////
                 if(bsize==32 && ( abs ( pyy[-1] + pxy[bsize*2-1] - (2*pxy[bsize-1]) ) < (1<<(bitDepthY-5) ) ) && ( abs ( pyy[-1] + pyy[bsize*2-1] - (2*pyy[bsize-1]) ) < (1<<(bitDepthY-5) ) ))
+                {
                     biIntFlag=1;
+                }
+                else
+                {
+                    biIntFlag = 0;
+                }
             } // End of if ( 1 == filterFlag )
+
      
+            ///////////////////
+            // SECOND FILTERING
+            ///////////////////
             if(biIntFlag==1)
             {
                 pfyy[MINUS]=pyy[MINUS];
-                for(int i=0;i<(bsize*2-2);i++)
+                for(int i=0;i<(bsize*2-1);i++)
                 {
                     pfyy[i]=((63-i)*pyy[MINUS]+(i+1)*pyy[63]+32)>>6; 
                 }
                 pfyy[63]=pyy[63];
-                for(int i=0;i<(bsize*2-2);i++)
+                for(int i=0;i<(bsize*2-1);i++)
                 {
                     pfxy[i]=((63-i)*pyy[MINUS]+(i+1)*pxy[63]+32)>>6;
                 }
                 pfxy[63]=pxy[63];
             } // End of if ( 1 == biIntFlag )
-
             else
             {
                 pfyy[MINUS]=(pyy[ZERO]+2*pyy[MINUS]+pxy[ZERO]+2)>>2;
-                for(int i=0;i<(bsize*2-2);i++)
+                for(int i=0;i<(bsize*2-1);i++)
                 {
                     pfyy[i]=(pyy[i+1]+2*pyy[i]+pyy[i-1]+2)>>2;
                 }
                 pfyy[bsize*2-1]=pyy[bsize*2-1];
-                for(int i=0;i<(bsize*2-2);i++)
+                pfxy[0] = (pyy[MINUS] + 2 * pxy[ZERO] + pxy[ONE] + 2) >> 2;
+                for(int i=1;i<(bsize*2-1);i++)
                 {
                     pfxy[i]=(pxy[i-1]+2*pxy[i]+pxy[i+1]+2)>>2;
                 }
@@ -558,6 +571,7 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
     
         __syncthreads();
 
+/*
         //////////////
         // Switch pointer to pfyy or p_yy
         // Switch pointer to pfxy or p_xy
@@ -1055,8 +1069,10 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
 
        }  // if ( 4 == bsize) // end of SATD 4 COMPUTATION
 
-        
+ */       
     } // End of for(int mode =0;mode <35;mode++)
+
+/*
     
     __syncthreads();
 
