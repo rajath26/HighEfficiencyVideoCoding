@@ -62,7 +62,7 @@ __device__ int sumArray(uint8_t *array, uint8_t start, uint8_t end)
 
     int result;
 
-    for ( int counter = start; counter < end; counter++ )
+    for ( int counter = start; counter <= end; counter++ )
         result += array[counter];
 
     return result;
@@ -571,7 +571,6 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
     
         __syncthreads();
 
-/*
         //////////////
         // Switch pointer to pfyy or p_yy
         // Switch pointer to pfxy or p_xy
@@ -612,9 +611,9 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
             float logValue = log2f(bsize+1.0);
             int intLog = (int) logValue;
 
-            predSamplesY[tx][ty]=((bsize-1-tx)*selyy[ty]+(tx+1)*selxy[bsize]+(bsize-1-ty)*selxy[tx]+(ty+1)*selyy[bsize]+bsize)>>intLog; //TO_DO: Replace logarithmic with appropriate C function    
-            predSamplesCr[tx][ty]=((bsize-1-tx)*pycr[ty]+(tx+1)*pxcr[bsize]+(bsize-1-ty)*pxcr[tx]+(ty+1)*pycr[bsize]+bsize)>>intLog; //TO_DO: Replace logarithmic with appropriate C function    
-            predSamplesCb[tx][ty]=((bsize-1-tx)*pycb[ty]+(tx+1)*pxcb[bsize]+(bsize-1-ty)*pxcb[tx]+(ty+1)*pycb[bsize]+bsize)>>intLog; //TO_DO: Replace logarithmic with appropriate C function    
+            predSamplesY[ty][tx]=((bsize-1-tx)*selyy[ty]+(tx+1)*selxy[bsize]+(bsize-1-ty)*selxy[tx]+(ty+1)*selyy[bsize]+bsize)>>intLog; //TO_DO: Replace logarithmic with appropriate C function    
+            predSamplesCr[ty][tx]=((bsize-1-tx)*pycr[ty]+(tx+1)*pxcr[bsize]+(bsize-1-ty)*pxcr[tx]+(ty+1)*pycr[bsize]+bsize)>>intLog; //TO_DO: Replace logarithmic with appropriate C function    
+            predSamplesCb[ty][tx]=((bsize-1-tx)*pycb[ty]+(tx+1)*pxcb[bsize]+(bsize-1-ty)*pxcb[tx]+(ty+1)*pycb[bsize]+bsize)>>intLog; //TO_DO: Replace logarithmic with appropriate C function    
     
         }
 
@@ -635,6 +634,7 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
             uint8_t firstSumCb = 0;
             uint8_t secondSumCb = 0;
 
+            //OPTIMIZATION 
             if ( 0 == tx && 0 == ty )
             {
                 firstSumY = sumArray(selxy, 0, bsize - 1);
@@ -650,14 +650,19 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
             else if ( 3 == tx && 0 == ty )
             {
                 secondSumCr = sumArray(pycr, 0, bsize - 1);
+                if(bsize==4)
+                {
+                    firstSumCb = sumArray(pxcb, 0, bsize - 1);
+                    secondSumCb = sumArray(pycb, 0, bsize - 1);
+                }     
             }
-            else if ( 4 == tx && 0 == ty )
+            else if ( 4 == tx && 0 == ty && bsize!=4 )
             {
-                firstSumCr = sumArray(pxcb, 0, bsize - 1);
+                firstSumCb = sumArray(pxcb, 0, bsize - 1);
             } 
-            else if ( 5 == tx && 0 == ty )
+            else if ( 5 == tx && 0 == ty && bsize!=4)
             {
-                secondSumCr = sumArray(pycb, 0, bsize - 1);
+                secondSumCb = sumArray(pycb, 0, bsize - 1);
             }
 
             __syncthreads(); 
@@ -682,39 +687,24 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
             if ( bsize < 32 )
             {
                 //Apply following changes to predSamples only for luma channel
-                predSamplesY[0][0]=(selyy[ZERO]+2*dcValY+selxy[0]+2)>>2;
-           
-                for(int i=1;i<bsize;i++)
-                {
-            	    predSamplesY[i][0]+=(selyy[i]+3*dcValY+2)>>2;
-                }  
+                if(ZERO == ty && ZERO == tx)
+                    predSamplesY[0][0]=(selyy[ZERO]+2*dcValY+selxy[0]+2)>>2;
+          
+                if(ONE == ty && tx>=ONE && tx<=bsize-1) 
+            	    predSamplesY[0][tx]=(selxy[tx]+3*dcValY+2)>>2;
             
-                for(int i=1;i<bsize;i++)
-                {
-            	    predSamplesY[0][i]+=(selxy[i]+3*dcValY+2)>>2;
-                } 
-
-                for(int i=1;i<bsize;i++)
-                {
-                    for(int j=1;j<bsize;j++)
-                    {
-                        predSamplesY[i][j]=dcValY;
-                    }
-                }
+                if(TWO == ty && tx>=ONE && tx<=bsize-1) 
+            	    predSamplesY[tx][0]=(selyy[tx]+3*dcValY+2)>>2;
+                
+                 if(tx >0 && ty >0)
+                      predSamplesY[tx][ty]=dcValY;
             } // End of if ( bsize < 32 )
             else 
             {
                 //For cr and cb, set dcValue as all value for predSamples of cr and cb  
-                for(int i=0;i<bsize;i++)
-                {
-                   for(int j=0;j<bsize;j++)
-                   {
-                      if ( bsize == 32 )
-                          predSamplesY[i][j] = dcValY;
-                      predSamplesCr[i][j]=dcValCr;
-                      predSamplesCb[i][j]=dcValCb;
-                   }
-                }  
+                      predSamplesY[ty][tx] = dcValY;
+                      predSamplesCr[ty][tx]=dcValCr;
+                      predSamplesCb[ty][tx]=dcValCb;
             } // End of else of if ( bsize < 32 )
 
         } // End of else if ( DC_MODE == mode )
@@ -731,9 +721,16 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
             {
                 if ( 0 == ty ) 
                 {
-                    refY[tx] = selxy[-1 + tx];
-                    refCr[tx] = pxcr[-1 + tx]; 
-                    refCb[tx] = pxcb[-1 + tx];
+                    if(tx==0){
+                        refY[0]=selyy[MINUS];
+                        refCr[0]=pycr[MINUS];
+                        refCb[0]=pycb[MINUS];
+                    }
+                    else{
+                        refY[tx] = selxy[-1 + tx];
+                        refCr[tx] = pxcr[-1 + tx]; 
+                        refCb[tx] = pxcb[-1 + tx];
+                    }
                     if ( 0 == tx )
                     {
                         refY[bsize+tx] = selxy[-1 + (tx + bsize)];
@@ -772,19 +769,31 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
             {
                 if ( 0 == ty ) 
                 {
-                    refY[tx] = selxy[-1 + tx];
+                    if(tx==0){
+                        refY[0]=selyy[MINUS];
+                    }
+                    else
+                        refY[tx] = selxy[-1 + tx];
                     if ( 0 == tx )
                         refY[bsize + tx] = selxy[-1 + (tx + bsize)];
                 }
                 if ( 1 == ty ) 
                 {
-                    refCr[tx] = pxcr[-1 + tx];
+                    if(tx==0){
+                        refCr[0]=pycr[MINUS];
+                    }
+                    else
+                       refCr[tx] = pxcr[-1 + tx];
                     if ( 0 == tx )
                         refCr[bsize+tx] = pxcr[-1 + (tx + bsize)];
                 } 
                 if ( 2 == ty ) 
                 {
-                    refCb[tx] = pxcb[-1 + tx];
+                    if(tx==0){
+                        refCb[0]=pycb[MINUS];
+                    }
+                    else
+                        refCb[tx] = pxcb[-1 + tx];
                     if ( 0 == tx )
                         refCb[bsize+tx] = pxcb[-1 + (tx + bsize)];
                 } 
@@ -849,7 +858,6 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
                     predSamplesY[ty][tx] = clip1Y(param);
                 }
 
-                __syncthreads();
 
             } // End of if ( mode == ANGULAR_26 && bsize < 32 )
 
@@ -879,12 +887,21 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
                     {
                         if ( 1 == ty )
                         {
-                            refY[-(tx + 1)] = selxy[ -1 + (( tx + 1 ) * ia[mode-11] + 128) >> 8];
+                            if((-1 + (( tx + 1 ) * ia[mode-11] + 128) >> 8)<0)
+                                  refY[-(tx + 1)] = selyy[MINUS];
+                            else
+                               refY[-(tx + 1)] = selxy[ -1 + (( tx + 1 ) * ia[mode-11] + 128) >> 8];
                         }
                         if ( 2 == ty )
                         {
-                            refCr[-(tx + 1)] = pxcr[ -1 + (( tx + 1 ) * ia[mode-11] + 128) >> 8];
-                            refCb[-(tx + 1)] = pxcb[ -1 + (( tx + 1 ) * ia[mode-11] + 128) >> 8];
+                            if((-1 + (( tx + 1 ) * ia[mode-11] + 128) >> 8)<0){
+                                  refCr[-(tx + 1)] = pycr[MINUS];
+                                  refCb[-(tx + 1)] = pycb[MINUS];
+                            }
+                            else{
+                                 refCr[-(tx + 1)] = pxcr[ -1 + (( tx + 1 ) * ia[mode-11] + 128) >> 8];
+                                 refCb[-(tx + 1)] = pxcb[ -1 + (( tx + 1 ) * ia[mode-11] + 128) >> 8];
+                            }
                         }
                     } // End of if ( ((bsize * ipa[mode]) >> 5) < -1 )
                 } // End of if (ipa[mode] < 0)
@@ -926,15 +943,24 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
                     {
                         if ( 3 == ty )
                         {
-                            refY[-(tx + 1)] = selxy[ -1 + (( tx + 1 ) * ia[mode-11] + 128) >> 8];
+                            if((-1 + (( tx + 1 ) * ia[mode-11] + 128) >> 8)<0)
+                                refY[-(tx + 1)] = selyy[MINUS];
+                            else
+                                refY[-(tx + 1)] = selxy[ -1 + (( tx + 1 ) * ia[mode-11] + 128) >> 8];
                         }
                         if ( 4 == ty )
                         {
-                            refCr[-(tx + 1)] = pxcr[ -1 + (( tx + 1 ) * ia[mode-11] + 128) >> 8];
+                            if((-1 + (( tx + 1 ) * ia[mode-11] + 128) >> 8)<0)
+                                refCr[-(tx + 1)] = pycr[MINUS];
+                            else
+                                refCr[-(tx + 1)] = pxcr[ -1 + (( tx + 1 ) * ia[mode-11] + 128) >> 8];
                         }
                         if ( 5 == ty )
                         {
-                            refCb[-(tx + 1)] = pxcb[ -1 + (( tx + 1 ) * ia[mode-11] + 128) >> 8];
+                            if((-1 + (( tx + 1 ) * ia[mode-11] + 128) >> 8)<0)
+                                refCb[-(tx + 1)] = pycb[MINUS];
+                            else
+                                refCb[-(tx + 1)] = pxcb[ -1 + (( tx + 1 ) * ia[mode-11] + 128) >> 8];
                         }
                     } // End of if ( ((bsize * ipa[mode]) >> 5) < -1 )
                 } // End of if (ipa[mode] < 0)
@@ -978,13 +1004,14 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
                 if ( 0 == tx )
                     predSamplesY[ty][tx] = clip1Y(( (selyy[ty]) + ((selxy[tx]-selyy[MINUS])>>1) ));
 
-                __syncthreads();
 
             } // End of if ( mode == ANGULAR_10 && bsize < 32 )
 
         } // End of else if ( mode > ANGULAR_1 && mode < ANGULAR_18 )
 
-      
+        __syncthreads(); 
+
+        /*
         ///////////////////
         // STEP 4: HADAMARD
         ///////////////////
