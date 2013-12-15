@@ -124,7 +124,7 @@ __device__ void extract(int32_t *sorted_values, int32_t *res, uint8_t *modes)
    for ( int counter = 0; counter < TOTAL_MODES; counter++)
    {
 
-         uint8_t mode = (sorted_values[counter] >> 7) & 0XFF; 
+         uint8_t mode = (sorted_values[counter] >> 8) & 0XFF; 
          int32_t value = (sorted_values[counter] >> 8);
          res[counter] = value;
          modes[counter] = mode;
@@ -1080,7 +1080,7 @@ __global__ void hevcPredictionKernel(uint8_t *y, uint8_t *cr, uint8_t *cb, int32
                       sumy += ((sum_t)a0) + (a0 >> BITS_PER_SUM);
                   }
                   printf("mode is %d\n",mode);
-                  sumy = ((y_satd_shared[mode] << 7)| mode) ;
+                  sumy = (((y_satd_shared[mode] << 8)) >>1 | mode) ;
                   y_satd_shared[mode] = sumy;
               }
               if(ty == 1)
