@@ -1,0 +1,210 @@
+debug print : 16
+
+ Y SIZE : 256
+I AM AT THE END CUDA MEMCPY STAGE 1
+No.of blocks launched:560
+
+ KERNEL CONFIG: 4 4 4 4
+
+ YUP I AM HERE 
+
+AFTER FIRST FILTERING PREDICTED MATRIX - PYY
+computed value for mode 0 is 840
+	52	52	57	57computed value for mode 2 is 840
+	57	56	56	57computed value for mode 3 is 840
+	57
+AFTER FIRST FILTERING PREDICTED MATRIX - PXY
+computed value for mode 4 is 840
+	52	52computed value for mode 5 is 840
+	52	52	52	52computed value for mode 6 is 840
+	52	52dcvaly :54, predsamplesy : 53
+Loading selxy[tx] as 52 and dcValY as 54For bsize: 4 For angular mode 2 selected p as neighbor
+For bsize: 4 For angular mode 3 selected p as neighbor
+For bsize: 4 For angular mode 4 selected p as neighbor
+For bsize: 4 For angular mode 5 selected p as neighbor
+For bsize: 4 For angular mode 6 selected p as neighbor
+For bsize: 4 For angular mode 7 selected p as neighbor
+For bsize: 4 For angular mode 8 selected p as neighbor
+For bsize: 4 For angular mode 9 selected p as neighbor
+For bsize: 4 For angular mode 10 selected p as neighbor
+For bsize: 4 For angular mode 11 selected p as neighbor
+For bsize: 4 For angular mode 12 selected p as neighbor
+For bsize: 4 For angular mode 13 selected p as neighbor
+For bsize: 4 For angular mode 14 selected p as neighbor
+For bsize: 4 For angular mode 15 selected p as neighbor
+For bsize: 4 For angular mode 16 selected p as neighbor
+For bsize: 4 For angular mode 17 selected p as neighbor
+
+OFFSETVAL-4
+
+OFFSETREF4
+For bsize: 4 For angular mode 18 selected p as neighbor
+For bsize: 4 For angular mode 19 selected p as neighbor
+For bsize: 4 For angular mode 20 selected p as neighbor
+For bsize: 4 For angular mode 21 selected p as neighbor
+For bsize: 4 For angular mode 22 selected p as neighbor
+For bsize: 4 For angular mode 23 selected p as neighbor
+For bsize: 4 For angular mode 24 selected p as neighbor
+For bsize: 4 For angular mode 25 selected p as neighbor
+For bsize: 4 For angular mode 26 selected p as neighbor
+For bsize: 4 For angular mode 27 selected p as neighbor
+For bsize: 4 For angular mode 28 selected p as neighbor
+For bsize: 4 For angular mode 29 selected p as neighbor
+For bsize: 4 For angular mode 30 selected p as neighbor
+For bsize: 4 For angular mode 31 selected p as neighbor
+For bsize: 4 For angular mode 32 selected p as neighbor
+For bsize: 4 For angular mode 33 selected p as neighbor
+For bsize: 4 For angular mode 34 selected p as neighbor
+************GPU Result : satd value for mode 2 has value 21
+************GPU Result : satd value for mode 3 has value 34
+************GPU Result : satd value for mode 4 has value 34
+************GPU Result : satd value for mode 5 has value 34
+************GPU Result : satd value for mode 6 has value 40
+************GPU Result : satd value for mode 10 has value 40
+************GPU Result : satd value for mode 1 has value 41
+************GPU Result : satd value for mode 8 has value 44
+************GPU Result : satd value for mode 9 has value 44
+************GPU Result : satd value for mode 7 has value 48
+************GPU Result : satd value for mode 0 has value 50
+************GPU Result : satd value for mode 11 has value 52
+************GPU Result : satd value for mode 12 has value 52
+************GPU Result : satd value for mode 23 has value 52
+************GPU Result : satd value for mode 24 has value 52
+************GPU Result : satd value for mode 25 has value 52
+************GPU Result : satd value for mode 27 has value 52
+************GPU Result : satd value for mode 28 has value 52
+************GPU Result : satd value for mode 29 has value 52
+************GPU Result : satd value for mode 30 has value 52
+************GPU Result : satd value for mode 31 has value 52
+************GPU Result : satd value for mode 32 has value 52
+************GPU Result : satd value for mode 33 has value 52
+************GPU Result : satd value for mode 34 has value 52
+************GPU Result : satd value for mode 26 has value 61
+************GPU Result : satd value for mode 13 has value 64
+************GPU Result : satd value for mode 22 has value 64
+************GPU Result : satd value for mode 14 has value 65
+************GPU Result : satd value for mode 15 has value 72
+************GPU Result : satd value for mode 16 has value 72
+************GPU Result : satd value for mode 21 has value 74
+************GPU Result : satd value for mode 17 has value 75
+************GPU Result : satd value for mode 19 has value 75
+************GPU Result : satd value for mode 20 has value 82
+************GPU Result : satd value for mode 18 has value 88
+current result num_block_size is 16
+from serial code num_block is 16
+No.of blocks launched:140
+
+ KERNEL CONFIG: 2 2 8 8
+
+ YUP I AM HERE 
+
+AFTER FIRST FILTERING PREDICTED MATRIX - PYY
+	58	58	57	57	57	56	56	57	57	57	57	56	56	56	57	57	57
+AFTER FIRST FILTERING PREDICTED MATRIX - PXY
+	58	58	58	58	58	58	58	58	58	58	58	58	58	58	58	58dcvaly :57, predsamplesy : 58
+Loading selxy[tx] as 58 and dcValY as 57For bsize : 8 For angular mode 2 selected pf as neighbor
+For bsize: 8 For angular mode 3 selected p as neighbor
+For bsize: 8 For angular mode 4 selected p as neighbor
+For bsize: 8 For angular mode 5 selected p as neighbor
+For bsize: 8 For angular mode 6 selected p as neighbor
+For bsize: 8 For angular mode 7 selected p as neighbor
+For bsize: 8 For angular mode 8 selected p as neighbor
+For bsize: 8 For angular mode 9 selected p as neighbor
+For bsize: 8 For angular mode 10 selected p as neighbor
+For bsize: 8 For angular mode 11 selected p as neighbor
+For bsize: 8 For angular mode 12 selected p as neighbor
+For bsize: 8 For angular mode 13 selected p as neighbor
+For bsize: 8 For angular mode 14 selected p as neighbor
+For bsize: 8 For angular mode 15 selected p as neighbor
+For bsize: 8 For angular mode 16 selected p as neighbor
+For bsize: 8 For angular mode 17 selected p as neighbor
+
+FOR MODE 17 SELYY
+	58	58	57	57	57	56	56	57	57	57	57	56	56	56	57	57	57
+FOR MODE 17 SELXY
+	58	58	58	58	58	58	58	58	58	58	58	58	58	58	58	58
+OFFSETVAL-7
+
+OFFSETREF7
+Ref Value of index 0 is 58
+Ref Value of index 1 is 58
+Ref Value of index 2 is 57
+Ref Value of index 3 is 57
+Ref Value of index 4 is 57
+Ref Value of index 5 is 56
+Ref Value of index 6 is 56
+Ref Value of index 7 is 57
+Ref Value of index 8 is 57
+Ref Value of index 9 is 57
+Ref Value of index 10 is 57
+Ref Value of index 11 is 57
+Ref Value of index 12 is 57
+Ref Value of index 13 is 57
+Ref Value of index 14 is 57
+Ref Value of index 15 is 57
+Ref Value of index 16 is 57
+
+RANGE: -7
+Ref Value in negative range of index -1 is 58
+Ref Value in negative range of index -2 is 58
+Ref Value in negative range of index -3 is 58
+Ref Value in negative range of index -4 is 58
+Ref Value in negative range of index -5 is 58
+Ref Value in negative range of index -6 is 58
+Ref Value in negative range of index -7 is 58
+For bsize : 8 For angular mode 18 selected pf as neighbor
+For bsize: 8 For angular mode 19 selected p as neighbor
+For bsize: 8 For angular mode 20 selected p as neighbor
+For bsize: 8 For angular mode 21 selected p as neighbor
+For bsize: 8 For angular mode 22 selected p as neighbor
+For bsize: 8 For angular mode 23 selected p as neighbor
+For bsize: 8 For angular mode 24 selected p as neighbor
+For bsize: 8 For angular mode 25 selected p as neighbor
+For bsize: 8 For angular mode 26 selected p as neighbor
+For bsize: 8 For angular mode 27 selected p as neighbor
+For bsize: 8 For angular mode 28 selected p as neighbor
+For bsize: 8 For angular mode 29 selected p as neighbor
+For bsize: 8 For angular mode 30 selected p as neighbor
+For bsize: 8 For angular mode 31 selected p as neighbor
+For bsize: 8 For angular mode 32 selected p as neighbor
+For bsize: 8 For angular mode 33 selected p as neighbor
+For bsize : 8 For angular mode 34 selected pf as neighbor
+current result num_block_size is 4
+from serial code num_block is 4
+Serial code : For mode: 3 Ref value:18
+Serial code : For mode: 5 Ref value:19
+Serial code : For mode: 4 Ref value:20
+Serial code : For mode: 2 Ref value:22
+Serial code : For mode: 6 Ref value:26
+Serial code : For mode: 7 Ref value:34
+Serial code : For mode: 8 Ref value:36
+Serial code : For mode: 9 Ref value:40
+Serial code : For mode: 1 Ref value:41
+Serial code : For mode: 0 Ref value:50
+Serial code : For mode: 10 Ref value:52
+Serial code : For mode: 11 Ref value:52
+Serial code : For mode: 23 Ref value:52
+Serial code : For mode: 24 Ref value:52
+Serial code : For mode: 25 Ref value:52
+Serial code : For mode: 27 Ref value:52
+Serial code : For mode: 28 Ref value:52
+Serial code : For mode: 29 Ref value:52
+Serial code : For mode: 30 Ref value:52
+Serial code : For mode: 31 Ref value:52
+Serial code : For mode: 32 Ref value:52
+Serial code : For mode: 33 Ref value:52
+Serial code : For mode: 34 Ref value:52
+Serial code : For mode: 12 Ref value:56
+Serial code : For mode: 26 Ref value:61
+Serial code : For mode: 22 Ref value:64
+Serial code : For mode: 13 Ref value:65
+Serial code : For mode: 14 Ref value:65
+Serial code : For mode: 15 Ref value:72
+Serial code : For mode: 21 Ref value:74
+Serial code : For mode: 19 Ref value:75
+Serial code : For mode: 17 Ref value:76
+Serial code : For mode: 16 Ref value:80
+Serial code : For mode: 20 Ref value:82
+Serial code : For mode: 18 Ref value:88
+Result 0, ref and student y_modes mismatched
+Error in frame 1
