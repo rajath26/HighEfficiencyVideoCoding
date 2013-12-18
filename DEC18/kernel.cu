@@ -142,12 +142,6 @@ __device__ void extract(int32_t *sorted_values, uint8_t *modes)
          //    printf("res_counter : %d\n",res[counter]);
    }
 
-   if(threadIdx.x ==0 && threadIdx.y==0 && blockIdx.x == 0 && blockIdx.y == 0){
-         //  for(int i=0;i<35;i++) printf("%d\n",sorted_values[i]);
-           
-        }
-
-
 } // End of extract()
 
 //////////////////////////////////////////////////////
