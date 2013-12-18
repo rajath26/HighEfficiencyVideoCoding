@@ -1225,8 +1225,19 @@ ece408_intra_pred_result *ece408_competition(ece408_frame *imgs, int num_frames)
                     exit(EXIT_FAILURE);
                 }
 
-                if ( luma_size > 4 )
+                if ( luma_size >= 4 && luma_size < 32 )
                 {
+                   if(cur_result->cr_modes){ 
+                            free(cur_result->cr_modes);
+                            cur_result->cr_modes = NULL; 
+                   }
+                   if(cur_result->cb_modes){ 
+                            free(cur_result->cb_modes);
+                            cur_result->cr_modes = NULL;
+                   }
+                    
+                    cur_result->cr_modes = (uint8_t *)malloc(mode_size*sizeof(uint8_t));
+                    cur_result->cb_modes = (uint8_t *)malloc(mode_size*sizeof(uint8_t));
                     cuda_ret = cudaMalloc((void **) &d_res_cr, cr_res_size);
                     if ( cuda_ret != cudaSuccess )
                     {
@@ -1291,7 +1302,7 @@ ece408_intra_pred_result *ece408_competition(ece408_frame *imgs, int num_frames)
                     exit(EXIT_FAILURE);
                 }
                 
-/*
+
 cuda_ret = cudaMemcpy(cur_result->cr_satd_results, d_res_cr, cr_res_size, cudaMemcpyDeviceToHost);
 if ( cuda_ret != cudaSuccess )
 {
@@ -1306,7 +1317,7 @@ printf("\n%s in %s at line %d\n", cudaGetErrorString(cuda_ret), __FILE__, __LINE
 exit(EXIT_FAILURE);
 }
 
-*/
+
 
 cuda_ret = cudaMemcpy(cur_result->y_modes, d_y_modes,mode_size, cudaMemcpyDeviceToHost);
 if ( cuda_ret != cudaSuccess )
@@ -1314,23 +1325,49 @@ if ( cuda_ret != cudaSuccess )
 printf("\n%s in %s at line %d\n", cudaGetErrorString(cuda_ret), __FILE__, __LINE__);
 exit(EXIT_FAILURE);
 }
-/*
-cuda_ret = cudaMemcpy(cur_result->cr_modes, d_cr_modes, cr_res_size, cudaMemcpyDeviceToHost);
+
+if(luma_size < 32){
+cuda_ret = cudaMemcpy(cur_result->cr_modes, d_cr_modes, mode_size, cudaMemcpyDeviceToHost);
 if ( cuda_ret != cudaSuccess )
 {
 printf("\n%s in %s at line %d\n", cudaGetErrorString(cuda_ret), __FILE__, __LINE__);
 exit(EXIT_FAILURE);
 }
 
-cuda_ret = cudaMemcpy(cur_result->cb_modes, d_cb_modes, cb_res_size, cudaMemcpyDeviceToHost);
+cuda_ret = cudaMemcpy(cur_result->cb_modes, d_cb_modes, mode_size, cudaMemcpyDeviceToHost);
 if ( cuda_ret != cudaSuccess )
 {
 printf("\n%s in %s at line %d\n", cudaGetErrorString(cuda_ret), __FILE__, __LINE__);
 exit(EXIT_FAILURE);
 }
-*/
+}
+
+if(d_res_cr){
+cudaFree(d_res_cr);
+d_res_cr = NULL;
+}
+if(d_res_cb){
+cudaFree(d_res_cb);
+d_res_cb = NULL;
+}
+if(d_res_y){
+cudaFree(d_res_y);
+d_res_y = NULL;
+}
+if(d_y_modes){
+cudaFree(d_y_modes);
+d_y_modes = NULL;
+}
+if(d_cr_modes){
+cudaFree(d_cr_modes);
+d_cr_modes = NULL;
+}
+if(d_cb_modes){
+cudaFree(d_cb_modes);
+d_cb_modes = NULL;
+}
+
                 
-
          cur_result++;
                 res_count++;
          }
